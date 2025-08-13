@@ -5,6 +5,7 @@
     {
       "id": "Twitchat",
       "url": "...",
+      "origins": [],
       "x": 0,
       "y": 0,
       "width": 1920,
@@ -18,6 +19,7 @@
     {
       "id": "blerps",
       "url": "...",
+      "origins": [],
       "x": 0,
       "y": 0,
       "width": 1920,
@@ -31,6 +33,7 @@
     {
       "id": "streamelements",
       "url": "...",
+      "origins": [],
       "x": 0,
       "y": 0,
       "width": 1920,
