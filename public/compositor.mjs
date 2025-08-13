@@ -239,10 +239,18 @@ async function mountDomOverlay(ov){
   host.style.pointerEvents = 'none';
 
   const shadow = host.attachShadow({ mode: 'open' });
-  // fetch processed fragment with rewritten URLs
-  const res = await fetch(`/overlay/${encodeURIComponent(ov.id)}/fragment`);
-  if (!res.ok) throw new Error(`failed to fetch fragment for ${ov.id}`);
-  const html = await res.text();
+
+  // Ensure requests for this overlay carry the correct ?overlay=ID
+  const prev = window.__ovActiveOverlay;
+  window.__ovActiveOverlay = ov.id;
+  let html;
+  try {
+    const res = await fetch(`/overlay/${encodeURIComponent(ov.id)}/fragment`);
+    if (!res.ok) throw new Error(`failed to fetch fragment for ${ov.id}`);
+    html = await res.text();
+  } finally {
+    window.__ovActiveOverlay = prev;
+  }
 
   // Attach a style to normalize
   const baseStyle = document.createElement('style');
@@ -289,9 +297,16 @@ function mountIframeOverlay(ov){
 async function mountLightDomOverlay(ov, root){
   // Server returns full HTML with link hrefs already carrying &scope=[data-ov="ID"],
   // and inline <style> pre-scoped.
-  const res = await fetch(`/overlay/${encodeURIComponent(ov.id)}/full`, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`failed to fetch full for ${ov.id}`);
-  const html = await res.text();
+  const prev = window.__ovActiveOverlay;
+  window.__ovActiveOverlay = ov.id;
+  let html;
+  try {
+    const res = await fetch(`/overlay/${encodeURIComponent(ov.id)}/full`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`failed to fetch full for ${ov.id}`);
+    html = await res.text();
+  } finally {
+    window.__ovActiveOverlay = prev;
+  }
 
   const doc = new DOMParser().parseFromString(html, 'text/html');
 

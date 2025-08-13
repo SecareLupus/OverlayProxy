@@ -400,6 +400,11 @@ const wsProxy = httpProxy.createProxyServer({
   ignorePath: true, // we'll compute full upstream URL ourselves
 });
 
+wsProxy.on('error', (err, _req, socket) => {
+  console.warn('ws proxy error', err);
+  if (socket) try { socket.destroy(); } catch {}
+});
+
 // Simple control bus for your compositor clients
 const controlWss = new WebSocketServer({ noServer: true });
 const controlClients = new Set();
@@ -461,6 +466,9 @@ const server = app.listen(PORT, () => console.log(`[overlay-proxy] http://localh
 const WS_PREFIXES = ['/socket.io/', '/ws', '/realtime', '/live', '/cable']; // extend as needed
 
 server.on('upgrade', async (req, socket, head) => {
+  // Avoid crashing on client socket errors (e.g. ECONNRESET)
+  socket.on('error', err => console.warn('ws client error', err));
+
   try {
     const url = new URL(req.url, 'http://localhost'); // parse only
     const path = url.pathname;
