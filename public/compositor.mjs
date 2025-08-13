@@ -227,22 +227,28 @@ function installRuntimeShims(originToId){
 }
 
 async function mountDomOverlay(ov){
-  const host = document.createElement('div');
-  host.className = 'overlay-host';
-  host.style.left = px(ov.x);
-  host.style.top = px(ov.y);
-  host.style.width = px(ov.width);
-  host.style.height = px(ov.height);
-  host.style.zIndex = String(ov.z ?? 0);
-  host.style.opacity = String(ov.opacity ?? 1);
-  host.style.transform = `scale(${ov.scale ?? 1})`;
-  host.style.pointerEvents = 'none';
-
+  const host = makeHost(ov);
   const shadow = host.attachShadow({ mode: 'open' });
-  // fetch processed fragment with rewritten URLs
-  const res = await fetch(`/overlay/${encodeURIComponent(ov.id)}/fragment`);
-  if (!res.ok) throw new Error(`failed to fetch fragment for ${ov.id}`);
-  const html = await res.text();
+
+  let html;
+  let res = await fetch(
+    `/overlay/${encodeURIComponent(ov.id)}/full?overlay=${encodeURIComponent(ov.id)}`,
+    { cache: 'no-store' }
+  );
+  if (!res.ok) {
+    console.warn('full overlay fetch failed, using fragment instead:', ov.id);
+    res = await fetch(
+      `/overlay/${encodeURIComponent(ov.id)}/fragment?overlay=${encodeURIComponent(ov.id)}`,
+      { cache: 'no-store' }
+    );
+    if (!res.ok) throw new Error(`failed to fetch fragment for ${ov.id}`);
+    const frag = await res.text();
+    html = `<!doctype html><html><head></head><body>${frag}</body></html>`;
+  } else {
+    html = await res.text();
+  }
+
+  const doc = new DOMParser().parseFromString(html, 'text/html');
 
   // Attach a style to normalize
   const baseStyle = document.createElement('style');
@@ -251,15 +257,34 @@ async function mountDomOverlay(ov){
     html,body{ background: transparent !important; }`;
   shadow.append(baseStyle);
 
+  // Hoist required head resources into the shadow root
+  for (const sel of ['link[rel="stylesheet"]', 'link[rel="modulepreload"]']) {
+    for (const link of doc.head.querySelectorAll(sel)) {
+      const clone = document.createElement('link');
+      for (const a of link.getAttributeNames()) clone.setAttribute(a, link.getAttribute(a));
+      shadow.appendChild(clone);
+    }
+  }
+  for (const st of doc.head.querySelectorAll('style')) {
+    const s = document.createElement('style');
+    s.textContent = st.textContent || '';
+    shadow.appendChild(s);
+  }
+  const headScripts = [...doc.head.querySelectorAll('script')];
+
   const container = document.createElement('div');
-  container.innerHTML = html;
+  for (const node of [...doc.body.childNodes]) container.appendChild(node);
   shadow.append(container);
 
-  await executeScriptsSequentially(container, ov.id);
-
+  // Inject into DOM immediately so one slow script doesn't block others
   root.appendChild(host);
   window.overlayAPI.register(ov, host);
 
+  // Execute scripts asynchronously; log but don't block overlay mounting
+  executeScriptsSequentially(container, ov.id)
+    .catch(e => console.error('overlay script error', ov.id, e));
+  executeScriptsSequentiallyInDocument(headScripts, ov.id)
+    .catch(e => console.error('overlay head script error', ov.id, e));
 }
 
 function mountIframeOverlay(ov){
@@ -287,9 +312,13 @@ function mountIframeOverlay(ov){
 async function mountLightDomOverlay(ov, root){
   // Server returns full HTML with link hrefs already carrying &scope=[data-ov="ID"],
   // and inline <style> pre-scoped.
-  const res = await fetch(`/overlay/${encodeURIComponent(ov.id)}/full`, { cache: 'no-store' });
+  let html;
+  const res = await fetch(
+    `/overlay/${encodeURIComponent(ov.id)}/full?overlay=${encodeURIComponent(ov.id)}`,
+    { cache: 'no-store' }
+  );
   if (!res.ok) throw new Error(`failed to fetch full for ${ov.id}`);
-  const html = await res.text();
+  html = await res.text();
 
   const doc = new DOMParser().parseFromString(html, 'text/html');
 
@@ -314,11 +343,11 @@ async function mountLightDomOverlay(ov, root){
   root.appendChild(host);
   window.overlayAPI.register(ov, host);
 
-
-  // Execute scripts in order in the real document head (same as you already do)
+  // Execute scripts in order but don't block other overlays
   const scripts = [...doc.querySelectorAll('head script, body script')];
   injectRuntimeShimsFor(ov.id);
-  await executeScriptsSequentiallyInDocument(scripts, ov.id);
+  executeScriptsSequentiallyInDocument(scripts, ov.id)
+    .catch(e => console.error('overlay script error', ov.id, e));
 }
 
 function injectRuntimeShimsFor(overlayId){
