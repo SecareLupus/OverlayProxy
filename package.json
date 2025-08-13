@@ -1,0 +1,29 @@
+{
+  "name": "overlay-proxy",
+  "version": "0.2.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "node --watch src/server.mjs",
+    "start": "NODE_ENV=production node src/server.mjs"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "etag": "^1.8.1",
+    "express": "^4.19.2",
+    "http-proxy": "^1.18.1",
+    "http-proxy-middleware": "^3.0.1",
+    "morgan": "^1.10.0",
+    "node-cache": "^5.1.2",
+    "package.json": "^2.0.1",
+    "postcss": "^8.5.6",
+    "postcss-selector-parser": "^6.1.2",
+    "set-cookie-parser": "^2.7.1",
+    "tough-cookie": "^4.1.4",
+    "undici": "^6.19.8",
+    "ws": "^8.18.3"
+  }
+}

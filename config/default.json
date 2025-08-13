@@ -1,0 +1,45 @@
+{
+  "canvas": { "width": 1920, "height": 1080, "background": "transparent" },
+  "cacheSeconds": 60,
+  "overlays": [
+    {
+      "id": "Twitchat",
+      "url": "...",
+      "x": 0,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "z": 8,
+      "scale": 1,
+      "opacity": 1,
+      "mode": "dom",
+      "interactive": false
+    },
+    {
+      "id": "blerps",
+      "url": "...",
+      "x": 0,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "z": 9,
+      "scale": 1,
+      "opacity": 1,
+      "mode": "dom",
+      "interactive": false
+    },
+    {
+      "id": "streamelements",
+      "url": "...",
+      "x": 0,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "z": 10,
+      "scale": 1,
+      "opacity": 1,
+      "mode": "dom",
+      "interactive": false
+    }
+  ]
+}
