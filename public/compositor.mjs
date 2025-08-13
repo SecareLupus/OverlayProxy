@@ -6,6 +6,11 @@ window.overlayConfig = config; // if not already set
 window.__ovOriginMap = {};
 for (const ov of (config.overlays || [])) {
   try { window.__ovOriginMap[new URL(ov.url).origin] = ov.id; } catch {}
+  if (Array.isArray(ov.origins)) {
+    for (const o of ov.origins) {
+      try { window.__ovOriginMap[new URL(o).origin] = ov.id; } catch {}
+    }
+  }
 }
 installRuntimeShims(window.__ovOriginMap);
 
@@ -30,30 +35,38 @@ function makeHost(ov){
   return host;
 }
 
-async function executeScriptsSequentially(container) {
-  const scripts = Array.from(container.querySelectorAll('script'));
-  for (const old of scripts) {
-    const s = document.createElement('script');
+async function executeScriptsSequentially(container, overlayId) {
+  const prev = window.__ovActiveOverlay;
+  window.__ovActiveOverlay = overlayId;
+  try {
+    const scripts = Array.from(container.querySelectorAll('script'));
+    for (const old of scripts) {
+      const s = document.createElement('script');
 
-    // Copy attributes (type, async, defer, crossorigin, etc.)
-    for (const attr of old.getAttributeNames()) {
-      s.setAttribute(attr, old.getAttribute(attr));
-    }
+      // Copy attributes (type, async, defer, crossorigin, etc.)
+      for (const attr of old.getAttributeNames()) {
+        s.setAttribute(attr, old.getAttribute(attr));
+      }
 
-    if (old.src) {
-      // External script: load and wait before continuing
-      await new Promise((resolve, reject) => {
-        s.onload = resolve;
-        s.onerror = reject;
-        s.src = old.src;     // already rewritten to /proxy
+      if (old.src) {
+        // External script: load and wait before continuing
+        await new Promise((resolve, reject) => {
+          s.onload = resolve;
+          s.onerror = reject;
+          s.src = old.src;     // already rewritten to /proxy
+          old.replaceWith(s);
+        });
+      } else {
+        // Inline script: execute immediately, in-order
+        s.textContent = old.textContent;
         old.replaceWith(s);
-      });
-    } else {
-      // Inline script: execute immediately, in-order
-      s.textContent = old.textContent;
-      old.replaceWith(s);
-      // no await needed; runs synchronously
+        // no await needed; runs synchronously
+      }
     }
+  } finally {
+    const id = overlayId;
+    window.__ovLastOverlay = { id, t: performance.now() };
+    window.__ovActiveOverlay = prev;
   }
 }
 
@@ -112,8 +125,8 @@ function installRuntimeShims(originToId){
         // never touch our control bus
         if (u.pathname === '/_control') return new OrigWS(url, protocols);
 
-        // SAME HOST: if it's /socket.io, just add overlay=<id> and connect locally
-        if (u.host === location.host && u.pathname.startsWith('/socket.io')) {
+        // SAME HOST: add overlay=<id> and connect locally
+        if (u.host === location.host) {
           const withId = addOverlayParam(u);
           console.debug('[shim][ws][local] ->', withId);
           return new OrigWS(withId, protocols);
@@ -144,22 +157,24 @@ function installRuntimeShims(originToId){
         const req = (input instanceof Request) ? input : new Request(input, init);
         const u = new URL(req.url, ORIGIN);
 
-        // same-origin /socket.io polling -> add overlay=<id>
-        if (u.origin === ORIGIN && u.pathname.startsWith('/socket.io')) {
+        // same-origin -> add overlay=<id>
+        if (u.origin === ORIGIN) {
           const id = pickOverlayIdFor(u.toString());
-          if (id) u.searchParams.set('overlay', id);
-          const cloned = new Request(u.toString(), {
-            method: req.method,
-            headers: req.headers,
-            body: (req.method === 'GET' || req.method === 'HEAD') ? undefined : req.body,
-            redirect: req.redirect,
-            referrer: req.referrer, referrerPolicy: req.referrerPolicy,
-            mode: 'same-origin', credentials: 'include',
-            cache: req.cache, integrity: req.integrity,
-            keepalive: req.keepalive, signal: req.signal,
-          });
-          console.debug('[shim][fetch][local] ->', u.toString());
-          return origFetch(cloned);
+          if (id) {
+            u.searchParams.set('overlay', id);
+            const cloned = new Request(u.toString(), {
+              method: req.method,
+              headers: req.headers,
+              body: (req.method === 'GET' || req.method === 'HEAD') ? undefined : req.body,
+              redirect: req.redirect,
+              referrer: req.referrer, referrerPolicy: req.referrerPolicy,
+              mode: 'same-origin', credentials: 'include',
+              cache: req.cache, integrity: req.integrity,
+              keepalive: req.keepalive, signal: req.signal,
+            });
+            console.debug('[shim][fetch][local] ->', u.toString());
+            return origFetch(cloned);
+          }
         }
 
         // cross-origin -> proxy through /proxy
@@ -193,11 +208,13 @@ function installRuntimeShims(originToId){
       xhr.open = function(method, url, async, user, pass){
         try {
           const u = new URL(url, ORIGIN);
-          if (u.origin === ORIGIN && u.pathname.startsWith('/socket.io')) {
+          if (u.origin === ORIGIN) {
             const id = pickOverlayIdFor(u.toString());
-            if (id) u.searchParams.set('overlay', id);
-            console.debug('[shim][xhr][local] ->', u.toString());
-            return open.call(xhr, method, u.toString(), async !== false, user, pass);
+            if (id) {
+              u.searchParams.set('overlay', id);
+              console.debug('[shim][xhr][local] ->', u.toString());
+              return open.call(xhr, method, u.toString(), async !== false, user, pass);
+            }
           }
         } catch {}
         return open.call(xhr, method, url, async, user, pass);
@@ -238,7 +255,7 @@ async function mountDomOverlay(ov){
   container.innerHTML = html;
   shadow.append(container);
 
-  executeScriptsSequentially(container);
+  await executeScriptsSequentially(container, ov.id);
 
   root.appendChild(host);
   window.overlayAPI.register(ov, host);

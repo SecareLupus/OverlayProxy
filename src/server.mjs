@@ -246,6 +246,33 @@ app.get('/proxy', async (req, res) => {
   }
 });
 
+// Generic same-origin proxy: any request with ?overlay=<id>
+app.all('*', async (req, res, next) => {
+  const overlayId = req.query.overlay;
+  if (!overlayId) return next();
+  const ov = getOverlayById(overlayId);
+  if (!ov) return res.status(404).send('Overlay not found');
+  try {
+    const upstreamUrl = originOf(ov) + req.originalUrl.replace(/([?&])overlay=[^&]+&?/, '$1').replace(/[?&]$/, '');
+    const headers = { ...req.headers, origin: originOf(ov), referer: ov.url, 'accept-encoding': 'identity' };
+    delete headers.host;
+    delete headers.cookie;
+    const cookie = await getCookieHeader(ov.id, upstreamUrl);
+    if (cookie) headers.cookie = cookie;
+    const body = (req.method === 'GET' || req.method === 'HEAD') ? undefined : await readRawBody(req);
+    const up = await fetch(upstreamUrl, { method: req.method, headers, body });
+    const buf = Buffer.from(await up.arrayBuffer());
+    res.status(up.status);
+    res.set('Content-Type', up.headers.get('content-type') || 'application/octet-stream');
+    res.set('Cache-Control', up.headers.get('cache-control') || 'no-store');
+    res.set('X-Resolved-Url', upstreamUrl);
+    res.set('X-Overlay', ov.id);
+    return res.send(buf);
+  } catch (e) {
+    res.status(502).set('X-Proxy-Error', 'generic').send(String(e?.message || e));
+  }
+});
+
 // One-segment filenames at our root like /foo.js, /bar.css, /socket.io.js.map
 app.all(/^\/[^\/?#]+\.(?:js|mjs|css|map|json|png|jpg|jpeg|gif|webp|svg|woff2?|woff|ttf)$/i, async (req, res) => {
   try {

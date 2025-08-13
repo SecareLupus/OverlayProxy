@@ -15,3 +15,7 @@ To persist across restarts, serialize the jar to disk later.
 CSS url() + srcset rewriting
 
 Backgrounds, sprites, fonts, and responsive images are now proxied (even when using relative paths), which reduces CORS/CSP friction and avoids broken assets.
+
+## Configuration
+
+Each overlay entry supports an optional `origins` array listing additional domains used by that overlay (for APIs, WebSockets, etc.). Requests to these domains will be tagged with the overlay ID so cookies and headers are routed correctly.
