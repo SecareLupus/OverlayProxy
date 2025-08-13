@@ -5,6 +5,8 @@
 npm i
 npm run dev
 # In OBS Browser Source: http://localhost:4321/
+npm test
+# run unit tests
 
 Sessions (minimal cookie jar)
 
