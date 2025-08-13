@@ -227,17 +227,7 @@ function installRuntimeShims(originToId){
 }
 
 async function mountDomOverlay(ov){
-  const host = document.createElement('div');
-  host.className = 'overlay-host';
-  host.style.left = px(ov.x);
-  host.style.top = px(ov.y);
-  host.style.width = px(ov.width);
-  host.style.height = px(ov.height);
-  host.style.zIndex = String(ov.z ?? 0);
-  host.style.opacity = String(ov.opacity ?? 1);
-  host.style.transform = `scale(${ov.scale ?? 1})`;
-  host.style.pointerEvents = 'none';
-
+  const host = makeHost(ov);
   const shadow = host.attachShadow({ mode: 'open' });
 
   // Ensure requests for this overlay carry the correct ?overlay=ID
@@ -245,12 +235,14 @@ async function mountDomOverlay(ov){
   window.__ovActiveOverlay = ov.id;
   let html;
   try {
-    const res = await fetch(`/overlay/${encodeURIComponent(ov.id)}/fragment`);
-    if (!res.ok) throw new Error(`failed to fetch fragment for ${ov.id}`);
+    const res = await fetch(`/overlay/${encodeURIComponent(ov.id)}/full`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`failed to fetch full for ${ov.id}`);
     html = await res.text();
   } finally {
     window.__ovActiveOverlay = prev;
   }
+
+  const doc = new DOMParser().parseFromString(html, 'text/html');
 
   // Attach a style to normalize
   const baseStyle = document.createElement('style');
@@ -259,8 +251,23 @@ async function mountDomOverlay(ov){
     html,body{ background: transparent !important; }`;
   shadow.append(baseStyle);
 
+  // Hoist required head resources into the shadow root
+  for (const sel of ['link[rel="stylesheet"]', 'link[rel="modulepreload"]']) {
+    for (const link of doc.head.querySelectorAll(sel)) {
+      const clone = document.createElement('link');
+      for (const a of link.getAttributeNames()) clone.setAttribute(a, link.getAttribute(a));
+      shadow.appendChild(clone);
+    }
+  }
+  for (const st of doc.head.querySelectorAll('style')) {
+    const s = document.createElement('style');
+    s.textContent = st.textContent || '';
+    shadow.appendChild(s);
+  }
+  const headScripts = [...doc.head.querySelectorAll('script')];
+
   const container = document.createElement('div');
-  container.innerHTML = html;
+  for (const node of [...doc.body.childNodes]) container.appendChild(node);
   shadow.append(container);
 
   // Inject into DOM immediately so one slow script doesn't block others
@@ -270,6 +277,8 @@ async function mountDomOverlay(ov){
   // Execute scripts asynchronously; log but don't block overlay mounting
   executeScriptsSequentially(container, ov.id)
     .catch(e => console.error('overlay script error', ov.id, e));
+  executeScriptsSequentiallyInDocument(headScripts, ov.id)
+    .catch(e => console.error('overlay head script error', ov.id, e));
 }
 
 function mountIframeOverlay(ov){
