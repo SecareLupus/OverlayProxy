@@ -328,19 +328,21 @@ function injectRuntimeShimsFor(overlayId){
     const OVERLAY_ID = ${JSON.stringify(overlayId)};
     const ORIGIN = location.origin;
 
-    // WebSocket tunnel for cross-origin
+    // WebSocket shim
     (function(){
       const OrigWS = window.WebSocket;
       function tunneled(url, protocols){
         try {
           const u = new URL(url, ORIGIN);
-          if (u.origin !== ORIGIN) {
-            const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-            const target = encodeURIComponent(u.toString());
-            const ov = OVERLAY_ID ? ('&overlay='+encodeURIComponent(OVERLAY_ID)) : '';
-            const turl = scheme + '://' + location.host + '/__ws?target=' + target + ov;
-            return new OrigWS(turl, protocols);
+          if (u.origin === ORIGIN) {
+            if (OVERLAY_ID) u.searchParams.set('overlay', OVERLAY_ID);
+            return new OrigWS(u.toString(), protocols);
           }
+          const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+          const target = encodeURIComponent(u.toString());
+          const ov = OVERLAY_ID ? ('&overlay='+encodeURIComponent(OVERLAY_ID)) : '';
+          const turl = scheme + '://' + location.host + '/__ws?target=' + target + ov;
+          return new OrigWS(turl, protocols);
         } catch {}
         return new OrigWS(url, protocols);
       }
@@ -350,38 +352,59 @@ function injectRuntimeShimsFor(overlayId){
       window.WebSocket = tunneled;
     })();
 
-    // fetch shim for cross-origin
+    // fetch shim
     (function(){
       const origFetch = window.fetch;
       window.fetch = function(input, init){
         try{
-          const u = new URL(typeof input === 'string' ? input : input.url, ORIGIN);
-          if (u.origin !== ORIGIN) {
-            const prox = '/proxy?overlay='+encodeURIComponent(OVERLAY_ID)+'&url='+encodeURIComponent(u.toString());
-            // preserve method/body/headers as best we can
-            const opts = Object.assign({ credentials: 'include' }, init || {});
-            return origFetch(prox, opts);
+          const req = (input instanceof Request) ? input : new Request(input, init);
+          const u = new URL(req.url, ORIGIN);
+          if (u.origin === ORIGIN) {
+            if (OVERLAY_ID) u.searchParams.set('overlay', OVERLAY_ID);
+            const cloned = new Request(u.toString(), {
+              method: req.method,
+              headers: req.headers,
+              body: (req.method === 'GET' || req.method === 'HEAD') ? undefined : req.body,
+              redirect: req.redirect,
+              referrer: req.referrer, referrerPolicy: req.referrerPolicy,
+              mode: 'same-origin', credentials: 'include',
+              cache: req.cache, integrity: req.integrity,
+              keepalive: req.keepalive, signal: req.signal,
+            });
+            return origFetch(cloned);
           }
+          const prox = '/proxy?overlay='+encodeURIComponent(OVERLAY_ID)+'&url='+encodeURIComponent(u.toString());
+          const cloned = new Request(prox, {
+            method: req.method,
+            headers: req.headers,
+            body: (req.method === 'GET' || req.method === 'HEAD') ? undefined : req.body,
+            redirect: req.redirect,
+            referrer: req.referrer, referrerPolicy: req.referrerPolicy,
+            mode: 'same-origin', credentials: 'include',
+            cache: req.cache, integrity: req.integrity,
+            keepalive: req.keepalive, signal: req.signal,
+          });
+          return origFetch(cloned);
         } catch {}
         return origFetch(input, init);
       };
     })();
 
-    // XHR shim for cross-origin
+    // XHR shim
     (function(){
       const Orig = window.XMLHttpRequest;
       function X(){
         const xhr = new Orig();
-        let _url = null, _method = 'GET', _async = true;
         const open = xhr.open;
         xhr.open = function(method, url, async, user, pass){
           try {
             const u = new URL(url, ORIGIN);
-            if (u.origin !== ORIGIN) {
-              _url = '/proxy?overlay='+encodeURIComponent(OVERLAY_ID)+'&url='+encodeURIComponent(u.toString());
-              _method = method; _async = async !== false;
-              return open.call(xhr, method, _url, _async, user, pass);
+            if (u.origin === ORIGIN) {
+              if (OVERLAY_ID) u.searchParams.set('overlay', OVERLAY_ID);
+              return open.call(xhr, method, u.toString(), async !== false, user, pass);
             }
+            const prox = '/proxy?overlay='+encodeURIComponent(OVERLAY_ID)+'&url='+encodeURIComponent(u.toString());
+            return open.call(xhr, method, prox, async !== false, user, pass);
           } catch {}
           return open.call(xhr, method, url, async, user, pass);
         };
