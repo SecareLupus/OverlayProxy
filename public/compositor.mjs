@@ -102,9 +102,9 @@ function installRuntimeShims(originToId){
   function pickOverlayIdFor(url) {
     // 1) active overlay if set
     if (window.__ovActiveOverlay) return window.__ovActiveOverlay;
-    // 2) recent overlay within last 6s
+    // 2) recent overlay within last 15s
     const last = window.__ovLastOverlay;
-    if (last && performance.now() - last.t < 6000) return last.id;
+    if (last && performance.now() - last.t < 15000) return last.id;
     // 3) by absolute origin map (for cross-origin only)
     try { return window.__ovOriginMap[new URL(url, ORIGIN).origin]; } catch { return undefined; }
   }
@@ -215,6 +215,11 @@ function installRuntimeShims(originToId){
               console.debug('[shim][xhr][local] ->', u.toString());
               return open.call(xhr, method, u.toString(), async !== false, user, pass);
             }
+          } else {
+            const id = pickOverlayIdFor(u.toString());
+            const prox = `/proxy?${id ? `overlay=${encodeURIComponent(id)}&` : ''}url=${encodeURIComponent(u.toString())}`;
+            console.debug('[shim][xhr][proxy] ->', prox, '(', u.toString(), ')');
+            return open.call(xhr, method, prox, async !== false, user, pass);
           }
         } catch {}
         return open.call(xhr, method, url, async, user, pass);
@@ -280,11 +285,15 @@ async function mountDomOverlay(ov){
   root.appendChild(host);
   window.overlayAPI.register(ov, host);
 
-  // Execute scripts asynchronously; log but don't block overlay mounting
-  executeScriptsSequentially(container, ov.id)
-    .catch(e => console.error('overlay script error', ov.id, e));
-  executeScriptsSequentiallyInDocument(headScripts, ov.id)
-    .catch(e => console.error('overlay head script error', ov.id, e));
+  // Execute head scripts first, then body scripts
+  (async () => {
+    try {
+      await executeScriptsSequentiallyInDocument(headScripts, ov.id);
+      await executeScriptsSequentially(container, ov.id);
+    } catch (e) {
+      console.error('overlay script error', ov.id, e);
+    }
+  })();
 }
 
 function mountIframeOverlay(ov){
@@ -479,6 +488,7 @@ async function main(){
       } catch (e) { console.error('control message error', e); }
     };
 
+    ws.onerror = () => { try { ws.close(); } catch {} };
     ws.onclose = () => setTimeout(connectControlBus, 2000);
   } catch {}
 })();

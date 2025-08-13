@@ -70,6 +70,8 @@ export async function rewriteHtml({ html, originUrl, overlayId, scopeSelector })
     if (src) $(el).attr('src', prox(src));
   });
 
+  $('script[integrity], link[integrity]').removeAttr('integrity');
+
   $('[src]').each((_, el)=> {
     const src = $(el).attr('src');
     if (src) $(el).attr('src', prox(src));

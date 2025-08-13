@@ -475,7 +475,9 @@ server.on('upgrade', async (req, socket, head) => {
 
     // control bus
     if (path === '/_control') {
-      return controlWss.handleUpgrade(req, socket, head, ws => { controlClients.add(ws); ws.on('close', () => controlClients.delete(ws)); });
+      return controlWss.handleUpgrade(req, socket, head, ws => {
+        controlWss.emit('connection', ws, req);
+      });
     }
 
     // socket.io & friends on our origin (keep your existing prefix check if you want)
