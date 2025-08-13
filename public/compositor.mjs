@@ -230,23 +230,22 @@ async function mountDomOverlay(ov){
   const host = makeHost(ov);
   const shadow = host.attachShadow({ mode: 'open' });
 
-  // Ensure requests for this overlay carry the correct ?overlay=ID
-  const prev = window.__ovActiveOverlay;
-  window.__ovActiveOverlay = ov.id;
   let html;
-  try {
-    let res = await fetch(`/overlay/${encodeURIComponent(ov.id)}/full`, { cache: 'no-store' });
-    if (!res.ok) {
-      console.warn('full overlay fetch failed, using fragment instead:', ov.id);
-      res = await fetch(`/overlay/${encodeURIComponent(ov.id)}/fragment`, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`failed to fetch fragment for ${ov.id}`);
-      const frag = await res.text();
-      html = `<!doctype html><html><head></head><body>${frag}</body></html>`;
-    } else {
-      html = await res.text();
-    }
-  } finally {
-    window.__ovActiveOverlay = prev;
+  let res = await fetch(
+    `/overlay/${encodeURIComponent(ov.id)}/full?overlay=${encodeURIComponent(ov.id)}`,
+    { cache: 'no-store' }
+  );
+  if (!res.ok) {
+    console.warn('full overlay fetch failed, using fragment instead:', ov.id);
+    res = await fetch(
+      `/overlay/${encodeURIComponent(ov.id)}/fragment?overlay=${encodeURIComponent(ov.id)}`,
+      { cache: 'no-store' }
+    );
+    if (!res.ok) throw new Error(`failed to fetch fragment for ${ov.id}`);
+    const frag = await res.text();
+    html = `<!doctype html><html><head></head><body>${frag}</body></html>`;
+  } else {
+    html = await res.text();
   }
 
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -313,16 +312,13 @@ function mountIframeOverlay(ov){
 async function mountLightDomOverlay(ov, root){
   // Server returns full HTML with link hrefs already carrying &scope=[data-ov="ID"],
   // and inline <style> pre-scoped.
-  const prev = window.__ovActiveOverlay;
-  window.__ovActiveOverlay = ov.id;
   let html;
-  try {
-    const res = await fetch(`/overlay/${encodeURIComponent(ov.id)}/full`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`failed to fetch full for ${ov.id}`);
-    html = await res.text();
-  } finally {
-    window.__ovActiveOverlay = prev;
-  }
+  const res = await fetch(
+    `/overlay/${encodeURIComponent(ov.id)}/full?overlay=${encodeURIComponent(ov.id)}`,
+    { cache: 'no-store' }
+  );
+  if (!res.ok) throw new Error(`failed to fetch full for ${ov.id}`);
+  html = await res.text();
 
   const doc = new DOMParser().parseFromString(html, 'text/html');
 
