@@ -255,11 +255,13 @@ async function mountDomOverlay(ov){
   container.innerHTML = html;
   shadow.append(container);
 
-  await executeScriptsSequentially(container, ov.id);
-
+  // Inject into DOM immediately so one slow script doesn't block others
   root.appendChild(host);
   window.overlayAPI.register(ov, host);
 
+  // Execute scripts asynchronously; log but don't block overlay mounting
+  executeScriptsSequentially(container, ov.id)
+    .catch(e => console.error('overlay script error', ov.id, e));
 }
 
 function mountIframeOverlay(ov){
@@ -314,11 +316,11 @@ async function mountLightDomOverlay(ov, root){
   root.appendChild(host);
   window.overlayAPI.register(ov, host);
 
-
-  // Execute scripts in order in the real document head (same as you already do)
+  // Execute scripts in order but don't block other overlays
   const scripts = [...doc.querySelectorAll('head script, body script')];
   injectRuntimeShimsFor(ov.id);
-  await executeScriptsSequentiallyInDocument(scripts, ov.id);
+  executeScriptsSequentiallyInDocument(scripts, ov.id)
+    .catch(e => console.error('overlay script error', ov.id, e));
 }
 
 function injectRuntimeShimsFor(overlayId){
