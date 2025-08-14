@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "node --watch src/server.mjs",
-    "start": "NODE_ENV=production node src/server.mjs"
+    "start": "NODE_ENV=production node src/server.mjs",
+    "test": "node --test test/index.test.mjs"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
