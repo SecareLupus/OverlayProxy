@@ -41,27 +41,27 @@ async function executeScriptsSequentially(container, overlayId) {
   window.__ovActiveOverlay = overlayId;
   try {
     const scripts = Array.from(container.querySelectorAll('script'));
+    let code = '';
     for (const old of scripts) {
-      const s = document.createElement('script');
-
-      // Copy attributes (type, async, defer, crossorigin, etc.)
-      for (const attr of old.getAttributeNames()) {
-        s.setAttribute(attr, old.getAttribute(attr));
-      }
-
       if (old.src) {
-        // External script: load and wait before continuing
-        await new Promise((resolve, reject) => {
-          s.onload = resolve;
-          s.onerror = reject;
-          s.src = old.src;     // already rewritten to /proxy
-          old.replaceWith(s);
-        });
+        try {
+          const res = await fetch(old.src);
+          code += await res.text() + '\n';
+        } catch (e) {
+          console.error('failed to fetch script', old.src, e);
+        }
       } else {
-        // Inline script: execute immediately, in-order
-        s.textContent = old.textContent;
-        old.replaceWith(s);
-        // no await needed; runs synchronously
+        code += (old.textContent || '') + '\n';
+      }
+      old.remove();
+    }
+    if (code.trim()) {
+      const blob = new Blob([code], { type: 'text/javascript' });
+      const url = URL.createObjectURL(blob);
+      try {
+        await import(/* @vite-ignore */ url);
+      } finally {
+        URL.revokeObjectURL(url);
       }
     }
   } finally {
@@ -75,18 +75,30 @@ async function executeScriptsSequentiallyInDocument(scripts, overlayId){
   const prev = window.__ovActiveOverlay;
   window.__ovActiveOverlay = overlayId;
   try {
+    let code = '';
     for (const old of scripts) {
-      const s = document.createElement('script');
-      for (const attr of old.getAttributeNames()) s.setAttribute(attr, old.getAttribute(attr));
-      await new Promise((resolve, reject) => {
-        s.onload = resolve;
-        s.onerror = reject;
-        if (old.src) { s.src = old.src; document.head.appendChild(s); }
-        else { s.textContent = old.textContent || ''; document.head.appendChild(s); resolve(); }
-      });
+      if (old.src) {
+        try {
+          const res = await fetch(old.src);
+          code += await res.text() + '\n';
+        } catch (e) {
+          console.error('failed to fetch script', old.src, e);
+        }
+      } else {
+        code += (old.textContent || '') + '\n';
+      }
+      old.remove();
+    }
+    if (code.trim()) {
+      const blob = new Blob([code], { type: 'text/javascript' });
+      const url = URL.createObjectURL(blob);
+      try {
+        await import(/* @vite-ignore */ url);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
     }
   } finally {
-    // leave a short “grace” so late async connects still get tagged
     const id = overlayId;
     window.__ovLastOverlay = { id, t: performance.now() };
     window.__ovActiveOverlay = prev;
