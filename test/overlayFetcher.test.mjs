@@ -45,6 +45,37 @@ test('caches pages per overlay id', async () => {
   });
 });
 
+test('does not cache failed pages', async () => {
+  await withMock(async (mockAgent) => {
+    const origin = 'https://example.com';
+    const url = origin + '/page';
+    const client = mockAgent.get(origin);
+    let calls = 0;
+    client
+      .intercept({ path: '/page', method: 'GET' })
+      .reply(500, () => {
+        calls++;
+        return 'err';
+      });
+    client
+      .intercept({ path: '/page', method: 'GET' })
+      .reply(200, () => {
+        calls++;
+        return 'ok';
+      });
+
+    const first = await fetchOverlayPage(url, 60, {}, 'a');
+    assert.equal(first.ok, false);
+    assert.equal(first.status, 500);
+
+    const second = await fetchOverlayPage(url, 60, {}, 'a');
+    assert.equal(second.ok, true);
+    assert.equal(second.text, 'ok');
+
+    assert.equal(calls, 2);
+  });
+});
+
 test('caches assets per overlay id', async () => {
   await withMock(async (mockAgent) => {
     const origin = 'https://example.com';
