@@ -132,3 +132,35 @@ test('sends stored cookies and isolates per overlay id', async () => {
     assert.deepEqual(seen, ['sess=A', 'sess=B']);
   });
 });
+
+    
+test('does not cache failed assets', async () => {
+  await withMock(async (mockAgent) => {
+    const origin = 'https://example.com';
+    const url = origin + '/asset.js';
+    const client = mockAgent.get(origin);
+    let calls = 0;
+    client
+      .intercept({ path: '/asset.js', method: 'GET' })
+      .reply(500, () => {
+        calls++;
+        return 'err';
+      }, { headers: { 'content-type': 'text/plain' } });
+    client
+      .intercept({ path: '/asset.js', method: 'GET' })
+      .reply(200, () => {
+        calls++;
+        return 'ok';
+      }, { headers: { 'content-type': 'text/plain' } });
+
+    const first = await fetchAsset(url, 60, {}, 'a');
+    assert.equal(first.ok, false);
+    assert.equal(first.status, 500);
+
+    const second = await fetchAsset(url, 60, {}, 'a');
+    assert.equal(second.ok, true);
+    assert.equal(second.buf.toString(), 'ok');
+
+    assert.equal(calls, 2);
+  });
+});
