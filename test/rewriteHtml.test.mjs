@@ -78,3 +78,17 @@ test('rewriteHtml unwraps nested ?url= layers', async () => {
     `${prox('https://example.com/a1.png')} 1x, ${prox('https://example.com/a2.png')} 2x`
   );
 });
+
+test('rewriteHtml keeps CSS when scoping throws', async () => {
+  const html = `<!doctype html><html><head><style>h1{color:red</style></head><body></body></html>`;
+  const out = await rewriteHtml({
+    html,
+    originUrl: 'https://example.com/page',
+    overlayId: 'ov1',
+    scopeSelector: '[data-ov="ov1"]'
+  });
+  const $ = cheerio.load(out);
+  const styleText = $('style').text();
+  assert.ok(styleText.includes('h1{color:red'));
+  assert.ok(styleText.includes('overlay-proxy: scope failed'));
+});
