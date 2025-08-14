@@ -52,3 +52,29 @@ test('rewriteHtml scopes CSS and strips CSP meta', async () => {
   assert.ok($('style').text().includes('[data-ov="ov1"]'));
   assert.equal($('meta[http-equiv="Content-Security-Policy"]').length, 0);
 });
+test('rewriteHtml unwraps nested ?url= layers', async () => {
+  const wrap = (u, depth = 1) => {
+    let cur = u;
+    for (let i = 0; i < depth; i++) {
+      cur = `https://proxy${i}.com/proxy?url=${encodeURIComponent(cur)}`;
+    }
+    return cur;
+  };
+  const html = `<!doctype html><html><head>
+    <script src="${wrap('https://example.com/app.js', 2)}"></script>
+    <link rel="stylesheet" href="${wrap('https://example.com/app.css', 3)}" />
+  </head><body>
+    <img src="${wrap('https://example.com/img.png', 2)}" />
+    <img srcset="${wrap('https://example.com/a1.png', 2)} 1x, ${wrap('https://example.com/a2.png', 2)} 2x" />
+  </body></html>`;
+  const out = await rewriteHtml({ html, originUrl: 'https://example.com/page', overlayId: 'ov1' });
+  assert.match(out, /script src="\/proxy\?overlay=ov1&amp;url=https%3A%2F%2Fexample.com%2Fapp.js"/);
+  assert.match(out, /link rel="stylesheet" href="\/proxy\?overlay=ov1&amp;url=https%3A%2F%2Fexample.com%2Fapp.css"/);
+  assert.match(out, /img src="\/proxy\?overlay=ov1&amp;url=https%3A%2F%2Fexample.com%2Fimg.png"/);
+  const $ = cheerio.load(out);
+  const prox = (u) => `/proxy?overlay=ov1&url=${encodeURIComponent(u)}`;
+  assert.equal(
+    $('img[srcset]').attr('srcset'),
+    `${prox('https://example.com/a1.png')} 1x, ${prox('https://example.com/a2.png')} 2x`
+  );
+});
