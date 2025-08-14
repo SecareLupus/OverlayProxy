@@ -34,3 +34,21 @@ test('rewriteHtml rewrites srcset and data-src', async () => {
   );
   assert.equal($('[data-src]').attr('data-src'), prox('https://example.com/lazy.png'));
 });
+
+test('rewriteHtml scopes CSS and strips CSP meta', async () => {
+  const html = `<!doctype html><html><head>
+    <link rel="stylesheet" href="https://example.com/app.css">
+    <style>h1{color:red}</style>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'">
+  </head><body></body></html>`;
+  const out = await rewriteHtml({
+    html,
+    originUrl: 'https://example.com/page',
+    overlayId: 'ov1',
+    scopeSelector: '[data-ov="ov1"]'
+  });
+  const $ = cheerio.load(out);
+  assert.ok($('link[rel="stylesheet"]').attr('href').includes('scope='));
+  assert.ok($('style').text().includes('[data-ov="ov1"]'));
+  assert.equal($('meta[http-equiv="Content-Security-Policy"]').length, 0);
+});
