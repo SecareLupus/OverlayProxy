@@ -102,3 +102,33 @@ test('caches assets per overlay id', async () => {
     assert.equal(calls, 2);
   });
 });
+
+test('sends stored cookies and isolates per overlay id', async () => {
+  await withMock(async (mockAgent) => {
+    const origin = 'https://example.com';
+    const client = mockAgent.get(origin);
+
+    client
+      .intercept({ path: '/a', method: 'GET' })
+      .reply(200, 'ok', { headers: { 'set-cookie': 'sess=A' } });
+    client
+      .intercept({ path: '/b', method: 'GET' })
+      .reply(200, 'ok', { headers: { 'set-cookie': 'sess=B' } });
+
+    const seen = [];
+    client
+      .intercept({ path: '/asset.js', method: 'GET' })
+      .reply(200, (opts) => {
+        seen.push(opts.headers.cookie || '');
+        return 'asset';
+      }, { headers: { 'content-type': 'text/plain' } })
+      .persist();
+
+    await fetchOverlayPage(origin + '/a', 60, {}, 'a');
+    await fetchOverlayPage(origin + '/b', 60, {}, 'b');
+    await fetchAsset(origin + '/asset.js', 60, {}, 'a');
+    await fetchAsset(origin + '/asset.js', 60, {}, 'b');
+
+    assert.deepEqual(seen, ['sess=A', 'sess=B']);
+  });
+});
