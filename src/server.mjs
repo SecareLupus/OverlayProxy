@@ -7,7 +7,6 @@ import etag from 'etag';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { fetchOverlayPage, fetchAsset } from './overlayFetcher.mjs';
 import { rewriteHtml, rewriteCss } from './rewrite_ext.mjs';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { fetch } from 'undici';
@@ -15,6 +14,7 @@ import httpProxy from 'http-proxy';
 import { WebSocketServer } from 'ws';
 import { getCookieHeader } from './cookies.mjs';
 import crypto from 'crypto';
+import { cfg, getOverlayById, originOf, parseBaseFromReferer, guessOverlayFromReferer, inferOverlayId } from './server_utils.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,9 +24,6 @@ app.disable('x-powered-by');
 app.use(morgan('dev'));
 app.use(compression());
 app.use(cors({ origin: process.env.ORIGIN_ALLOW || '*'}));
-
-// Load config
-const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/default.json'), 'utf8'));
 
 function unwrapProxyUrl(urlStr){
   try {
@@ -40,44 +37,6 @@ function unwrapProxyUrl(urlStr){
   } catch { return urlStr; }
 }
 
-function getOverlayById(id){ return (cfg.overlays || []).find(o => o.id === id); }
-function originOf(ov){ try { return new URL(ov.url).origin; } catch { return ''; } }
-
-// If the Referer is /proxy?...url=<base>, extract overlay + base URL.
-// Else if it's /overlay/:id..., use that overlay's URL as base.
-function parseBaseFromReferer(req) {
-  try {
-    const ref = req.headers.referer || '';
-    if (!ref) return {};
-    const ru = new URL(ref);
-    if (ru.pathname === '/proxy') {
-      return { overlayId: ru.searchParams.get('overlay') || undefined,
-               baseUrl:    ru.searchParams.get('url')     || undefined };
-    }
-    const m = ru.pathname.match(/\/overlay\/([^\/?#]+)/);
-    if (m) {
-      const overlayId = m[1];
-      const ov = getOverlayById(overlayId);
-      if (ov) return { overlayId, baseUrl: ov.url };
-    }
-  } catch {}
-  return {};
-}
-
-function guessOverlayFromReferer(req){
-  const ref = req.headers.referer || '';
-  const m = ref.match(/\/overlay\/([^\/?#]+)/); // works for /overlay/:id and /overlay/:id/fragment
-  return m ? m[1] : null;
-}
-
-function inferOverlayId(req){
-  return (
-    req.query.overlay ||
-    parseBaseFromReferer(req).overlayId ||
-    cfg.defaultOverlay ||
-    null
-  );
-}
 
 // Read raw request body as Buffer (for POST/PUT/PATCH)
 async function readRawBody(req){
