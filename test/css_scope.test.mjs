@@ -12,3 +12,12 @@ test('scopeCss prefixes selectors and rewrites roots', async () => {
   assert.equal(lines[2], `:where(${scope}) .a{padding:1px}`);
   assert.equal(lines[3], `:where(${scope}){--x:1}`);
 });
+
+test('scopeCss ignores keyframes inner selectors', async () => {
+  const scope = '[data-ov=test]';
+  const css = `@keyframes fade{from{opacity:0}to{opacity:1}}\n.b{animation:fade 1s}`;
+  const out = await scopeCss(css, scope);
+  const lines = out.trim().split(/\n/);
+  assert.equal(lines[0], '@keyframes fade{from{opacity:0}to{opacity:1}}');
+  assert.equal(lines[1], `:where(${scope}) .b{animation:fade 1s}`);
+});
