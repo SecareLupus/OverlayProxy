@@ -1,5 +1,6 @@
 import test from 'node:test';
 import { strict as assert } from 'node:assert';
+import * as cheerio from 'cheerio';
 import { rewriteHtml } from '../src/rewrite_ext.mjs';
 
 test('rewriteHtml proxies assets and strips integrity', async () => {
@@ -12,4 +13,24 @@ test('rewriteHtml proxies assets and strips integrity', async () => {
   assert.match(out, /link rel="stylesheet" href="\/proxy\?overlay=ov1&amp;url=https%3A%2F%2Fexample.com%2Fapp.css"/);
   assert.match(out, /img src="\/proxy\?overlay=ov1&amp;url=https%3A%2F%2Fexample.com%2Fimg.png"/);
   assert.doesNotMatch(out, /integrity=/);
+});
+
+test('rewriteHtml rewrites srcset and data-src', async () => {
+  const html = `<!doctype html><html><body>
+    <img srcset="https://example.com/a1.png 1x, https://example.com/a2.png 2x" />
+    <picture><source srcset="https://example.com/pic1.webp 1x, https://example.com/pic2.webp 2x" /></picture>
+    <div data-src="https://example.com/lazy.png"></div>
+  </body></html>`;
+  const out = await rewriteHtml({ html, originUrl: 'https://example.com/page', overlayId: 'ov1' });
+  const $ = cheerio.load(out);
+  const prox = (u) => `/proxy?overlay=ov1&url=${encodeURIComponent(u)}`;
+  assert.equal(
+    $('img').attr('srcset'),
+    `${prox('https://example.com/a1.png')} 1x, ${prox('https://example.com/a2.png')} 2x`
+  );
+  assert.equal(
+    $('source').attr('srcset'),
+    `${prox('https://example.com/pic1.webp')} 1x, ${prox('https://example.com/pic2.webp')} 2x`
+  );
+  assert.equal($('[data-src]').attr('data-src'), prox('https://example.com/lazy.png'));
 });
