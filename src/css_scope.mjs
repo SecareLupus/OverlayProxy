@@ -4,25 +4,31 @@ import selParser from 'postcss-selector-parser';
 // Build a transformer that prefixes every normal selector with the scope, and
 // rewrites html/body/:root to target the scope container.
 function makeSelectorTransformer(scope) {
+  // Base pseudo AST we can clone for prefixing/replacement
+  const basePrefix = selParser().astSync(`:where(${scope})`).first.nodes[0];
+
   return selParser((selectors) => {
     selectors.each((sel) => {
-      // Replace :root, html, body with the scope (no descendant)
+      let hasRoot = false;
+
       sel.walk((node) => {
         if (
           (node.type === 'pseudo' && node.value.toLowerCase() === ':root') ||
           (node.type === 'tag' && /^(html|body)$/i.test(node.value))
         ) {
-          // Replace whole selector with `scope`
-          sel.nodes = [selParser.selector({ nodes: [selParser.universal()] })].nodes; // reset
-          sel.nodes = [selParser.selector({ nodes: [] })].nodes; // ensure empty
-          const nsAst = selParser().astSync(scope).first;
-          sel.nodes = nsAst.nodes[0].nodes; // copy contents of scope selector
+          hasRoot = true;
         }
       });
 
-      // If selector still has content (not replaced), prefix with scope (zero specificity via :where)
-      const prefix = selParser().astSync(`:where(${scope}) `).first;
-      sel.prepend(prefix.nodes[0].nodes[0]); // prepend :where([data-ov="..."])␠
+      if (hasRoot) {
+        const only = basePrefix.clone();
+        only.spaces.after = '';
+        sel.nodes = [only];
+      } else {
+        const pref = basePrefix.clone();
+        pref.spaces.after = ' ';
+        sel.prepend(pref);
+      }
     });
   });
 }

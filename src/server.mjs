@@ -7,7 +7,6 @@ import etag from 'etag';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { fetchOverlayPage, fetchAsset } from './overlayFetcher.mjs';
 import { rewriteHtml, rewriteCss } from './rewrite_ext.mjs';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { fetch } from 'undici';
@@ -15,6 +14,7 @@ import httpProxy from 'http-proxy';
 import { WebSocketServer } from 'ws';
 import { getCookieHeader } from './cookies.mjs';
 import crypto from 'crypto';
+import { cfg, getOverlayById, originOf, parseBaseFromReferer, guessOverlayFromReferer, inferOverlayId } from './server_utils.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,9 +24,6 @@ app.disable('x-powered-by');
 app.use(morgan('dev'));
 app.use(compression());
 app.use(cors({ origin: process.env.ORIGIN_ALLOW || '*'}));
-
-// Load config
-const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/default.json'), 'utf8'));
 
 function unwrapProxyUrl(urlStr){
   try {
@@ -40,35 +37,6 @@ function unwrapProxyUrl(urlStr){
   } catch { return urlStr; }
 }
 
-function getOverlayById(id){ return (cfg.overlays || []).find(o => o.id === id); }
-function originOf(ov){ try { return new URL(ov.url).origin; } catch { return ''; } }
-
-// If the Referer is /proxy?...url=<base>, extract overlay + base URL.
-// Else if it's /overlay/:id..., use that overlay's URL as base.
-function parseBaseFromReferer(req) {
-  try {
-    const ref = req.headers.referer || '';
-    if (!ref) return {};
-    const ru = new URL(ref);
-    if (ru.pathname === '/proxy') {
-      return { overlayId: ru.searchParams.get('overlay') || undefined,
-               baseUrl:    ru.searchParams.get('url')     || undefined };
-    }
-    const m = ru.pathname.match(/\/overlay\/([^\/?#]+)/);
-    if (m) {
-      const overlayId = m[1];
-      const ov = getOverlayById(overlayId);
-      if (ov) return { overlayId, baseUrl: ov.url };
-    }
-  } catch {}
-  return {};
-}
-
-function guessOverlayFromReferer(req){
-  const ref = req.headers.referer || '';
-  const m = ref.match(/\/overlay\/([^\/?#]+)/); // works for /overlay/:id and /overlay/:id/fragment
-  return m ? m[1] : null;
-}
 
 // Read raw request body as Buffer (for POST/PUT/PATCH)
 async function readRawBody(req){
@@ -202,12 +170,21 @@ app.get('/config.js', (_req, res) => {
 app.get('/proxy', async (req, res) => {
   try {
     const raw = req.query.url;
-    const overlayId = req.query.overlay;
     if (!raw) return res.status(400).send('Missing url');
-    const resolvedUrl = unwrapProxyUrl(raw);
-    const ov = getOverlayById(overlayId) || {};
 
-    const upstream = await fetchAsset(resolvedUrl, cfg.cacheSeconds, req.headers, overlayId, ov.url);
+    const overlayId = inferOverlayId(req);
+    if (!overlayId) {
+      console.warn('proxy: no overlay', raw, req.headers.referer || '');
+      return res.status(400).set('X-Proxy-Error', 'overlay-missing').send('Overlay not resolved');
+    }
+    const ov = getOverlayById(overlayId);
+    if (!ov) return res.status(404).send('Overlay not found');
+
+    const resolvedUrl = unwrapProxyUrl(raw);
+    const headers = { ...req.headers, origin: originOf(ov), referer: ov.url };
+    delete headers.host;
+
+    const upstream = await fetchAsset(resolvedUrl, cfg.cacheSeconds, headers, overlayId, ov.url);
 
     let outBuf = upstream.buf;
     let outType = upstream.type;
@@ -237,7 +214,8 @@ app.get('/proxy', async (req, res) => {
       .set('Content-Type', outType)
       .set('Cache-Control', upstream.cacheControl || `public, max-age=${cfg.cacheSeconds}`)
       .set('X-Resolved-Url', resolvedUrl)
-      .set('X-Upstream-Status', String(upstream.status));
+      .set('X-Upstream-Status', String(upstream.status))
+      .set('X-Overlay', overlayId);
 
     if (upstream.etag) res.set('ETag', upstream.etag);
     return res.send(outBuf);
@@ -246,12 +224,20 @@ app.get('/proxy', async (req, res) => {
   }
 });
 
-// Generic same-origin proxy: any request with ?overlay=<id>
+// Generic same-origin proxy: infer overlay when possible
 app.all('*', async (req, res, next) => {
-  const overlayId = req.query.overlay;
-  if (!overlayId) return next();
+  if (req.path.startsWith('/overlay/')) return next();
+  if (/^\/[^\/?#]+\.(?:js|mjs|css|map|json|png|jpg|jpeg|gif|webp|svg|woff2?|woff|ttf)$/i.test(req.path)) return next();
+
+  const overlayId = inferOverlayId(req);
+  if (!overlayId) {
+    console.warn('generic: no overlay', req.method, req.originalUrl, req.headers.referer || '');
+    return res.status(400).set('X-Proxy-Error', 'overlay-missing').send('Overlay not resolved');
+  }
+
   const ov = getOverlayById(overlayId);
   if (!ov) return res.status(404).send('Overlay not found');
+
   try {
     const upstreamUrl = originOf(ov) + req.originalUrl.replace(/([?&])overlay=[^&]+&?/, '$1').replace(/[?&]$/, '');
     const headers = { ...req.headers, origin: originOf(ov), referer: ov.url, 'accept-encoding': 'identity' };
@@ -266,6 +252,7 @@ app.all('*', async (req, res, next) => {
     res.set('Content-Type', up.headers.get('content-type') || 'application/octet-stream');
     res.set('Cache-Control', up.headers.get('cache-control') || 'no-store');
     res.set('X-Resolved-Url', upstreamUrl);
+    res.set('X-Upstream-Status', String(up.status));
     res.set('X-Overlay', ov.id);
     return res.send(buf);
   } catch (e) {
@@ -475,7 +462,9 @@ server.on('upgrade', async (req, socket, head) => {
 
     // control bus
     if (path === '/_control') {
-      return controlWss.handleUpgrade(req, socket, head, ws => { controlClients.add(ws); ws.on('close', () => controlClients.delete(ws)); });
+      return controlWss.handleUpgrade(req, socket, head, ws => {
+        controlWss.emit('connection', ws, req);
+      });
     }
 
     // socket.io & friends on our origin (keep your existing prefix check if you want)

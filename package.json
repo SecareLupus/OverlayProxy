@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch src/server.mjs",
     "start": "NODE_ENV=production node src/server.mjs",
-    "test": "node --test test/index.test.mjs"
+    "test": "node --test"
   },
   "dependencies": {
     "cheerio": "^1.0.0",

@@ -147,11 +147,15 @@ async function mountDomOverlay(ov){
   root.appendChild(host);
   window.overlayAPI.register(ov, host);
 
-  // Execute scripts asynchronously; log but don't block overlay mounting
-  executeScriptsSequentially(container, ov.id)
-    .catch(e => console.error('overlay script error', ov.id, e));
-  executeScriptsSequentiallyInDocument(headScripts, ov.id)
-    .catch(e => console.error('overlay head script error', ov.id, e));
+  // Execute head scripts first, then body scripts
+  (async () => {
+    try {
+      await executeScriptsSequentiallyInDocument(headScripts, ov.id);
+      await executeScriptsSequentially(container, ov.id);
+    } catch (e) {
+      console.error('overlay script error', ov.id, e);
+    }
+  })();
 }
 
 function mountIframeOverlay(ov){

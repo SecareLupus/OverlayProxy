@@ -4,6 +4,20 @@ import { getCookieHeader, storeSetCookies } from './cookies.mjs';
 
 const cache = new NodeCache();
 
+for (const k of cache.keys()) {
+  if (/^(?:page|asset):https?:/.test(k)) cache.del(k);
+}
+
+function migrateLegacyCache(oldKey, newKey, cacheSeconds) {
+  const val = cache.get(oldKey);
+  if (val === undefined) return undefined;
+  const ttlMs = cache.getTtl(oldKey);
+  cache.del(oldKey);
+  const ttl = ttlMs ? Math.max(0, Math.round((ttlMs - Date.now()) / 1000)) : cacheSeconds;
+  cache.set(newKey, val, ttl);
+  return val;
+}
+
 // Optional: small helper to set a plausible Referer
 function refererFor(assetUrl, overlayPageUrl) {
   try {
@@ -15,9 +29,12 @@ function refererFor(assetUrl, overlayPageUrl) {
 }
 
 export async function fetchOverlayPage(url, cacheSeconds = 60, headers = {}, overlayId, overlayPageUrl = '') {
-  const key = `page:${url}`;
-  const hit = cache.get(key);
-  if (hit) return hit;
+  const key = `page:${overlayId}:${url}`;
+  let hit = cache.get(key);
+  if (hit === undefined) {
+    hit = migrateLegacyCache(`page:${url}`, key, cacheSeconds);
+  }
+  if (hit !== undefined) return hit;
 
   const merged = {
     ...headers,
@@ -41,9 +58,12 @@ export async function fetchOverlayPage(url, cacheSeconds = 60, headers = {}, ove
 }
 
 export async function fetchAsset(url, cacheSeconds = 60, headers = {}, overlayId, overlayPageUrl = '') {
-  const key = `asset:${url}`;
-  const hit = cache.get(key);
-  if (hit) return hit;
+  const key = `asset:${overlayId}:${url}`;
+  let hit = cache.get(key);
+  if (hit === undefined) {
+    hit = migrateLegacyCache(`asset:${url}`, key, cacheSeconds);
+  }
+  if (hit !== undefined) return hit;
 
   const merged = {
     ...headers,
@@ -68,4 +88,8 @@ export async function fetchAsset(url, cacheSeconds = 60, headers = {}, overlayId
   // Cache only successful assets
   if (res.ok) cache.set(key, out, cacheSeconds);
   return out;
+}
+
+export function clearCache() {
+  cache.flushAll();
 }
