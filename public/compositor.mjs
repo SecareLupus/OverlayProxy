@@ -199,11 +199,11 @@ function installRuntimeShims(originToId){
     };
   })();
 
-  // ---- XHR shim ----
-  (function(){
-    const Orig = window.XMLHttpRequest;
-    function X(){
-      const xhr = new Orig();
+    // ---- XHR shim ----
+    (function(){
+      const Orig = window.XMLHttpRequest;
+      function X(){
+        const xhr = new Orig();
       const open = xhr.open;
       xhr.open = function(method, url, async, user, pass){
         try {
@@ -226,10 +226,39 @@ function installRuntimeShims(originToId){
       };
       return xhr;
     }
-    X.prototype = Orig.prototype;
-    window.XMLHttpRequest = X;
-  })();
-}
+      X.prototype = Orig.prototype;
+      window.XMLHttpRequest = X;
+    })();
+
+    // ---- SharedWorker shim ----
+    (function(){
+      if (!('SharedWorker' in window)) return;
+      const OrigSW = window.SharedWorker;
+      window.SharedWorker = function(url, opts){
+        try {
+          const u = new URL(url, ORIGIN);
+          const id = pickOverlayIdFor(u.toString());
+          let workerUrl;
+          if (u.origin === ORIGIN) {
+            if (id) u.searchParams.set('overlay', id);
+            workerUrl = u.toString();
+          } else {
+            workerUrl = `/proxy?${id ? `overlay=${encodeURIComponent(id)}&` : ''}url=${encodeURIComponent(u.toString())}`;
+          }
+          const originMap = JSON.stringify(window.__ovOriginMap || {});
+          const prelude = `var window = self;\nself.__ovOriginMap = ${originMap};\n(${installRuntimeShims.toString()})(self.__ovOriginMap);\n${id ? `self.__ovActiveOverlay=${JSON.stringify(id)}; self.__ovLastOverlay={id:${JSON.stringify(id)},t:performance.now()};\n` : ''}importScripts(${JSON.stringify(workerUrl)});`;
+          const blob = new Blob([prelude], { type: 'application/javascript' });
+          const shimUrl = URL.createObjectURL(blob);
+          const sw = new OrigSW(shimUrl, opts);
+          setTimeout(() => URL.revokeObjectURL(shimUrl), 0);
+          return sw;
+        } catch (e) {
+          console.warn('[shim][sharedworker] fallback', e);
+          return new OrigSW(url, opts);
+        }
+      };
+    })();
+  }
 
 async function mountDomOverlay(ov){
   const host = makeHost(ov);
