@@ -14,7 +14,7 @@ const envDisable = ['1', 'true', 'yes'].includes(
 if (typeof cfg.useCache !== 'boolean') cfg.useCache = true;
 if (envDisable) cfg.useCache = false;
 
-async function discoverOverlayOrigins(){
+export async function discoverOverlayOrigins(){
   const urlRe = /\bhttps?:\/\/[^\s"'<>]+|\bwss?:\/\/[^\s"'<>]+/g;
 
   const scans = (cfg.overlays || []).map(async ov => {
@@ -24,7 +24,8 @@ async function discoverOverlayOrigins(){
     try {
       baseOrigin = new URL(ov.url).origin;
       set.add(baseOrigin);
-    } catch {
+    } catch (err) {
+      console.warn(`[overlay-proxy] invalid overlay url for ${ov.id}`, err);
       return;
     }
 
@@ -63,9 +64,13 @@ async function discoverOverlayOrigins(){
           while ((m2 = urlRe.exec(text)) !== null) {
             try { set.add(new URL(m2[0]).origin); } catch {}
           }
-        } catch {}
+        } catch (err) {
+          console.warn(`[overlay-proxy] origin discovery failed for ${ov.id} script ${jsUrl}`, err);
+        }
       }));
-    } catch {}
+    } catch (err) {
+      console.warn(`[overlay-proxy] origin discovery failed for ${ov.id}`, err);
+    }
 
     set.delete(baseOrigin);
     if (set.size > 0) {
@@ -77,8 +82,6 @@ async function discoverOverlayOrigins(){
 
   await Promise.all(scans);
 }
-
-await discoverOverlayOrigins();
 
 export function getOverlayById(id){ return (cfg.overlays || []).find(o => o.id === id); }
 

@@ -6,16 +6,22 @@ import compression from 'compression';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { cfg } from './server_utils.mjs';
+import { cfg, discoverOverlayOrigins } from './server_utils.mjs';
 import absPrefixProxy from './routes/absPrefixProxy.mjs';
 import socketioProxy from './routes/socketioProxy.mjs';
 import genericProxy from './routes/genericProxy.mjs';
 import overlayRoutes from './routes/overlay.mjs';
-import { installControlRoutes } from './controlBus.mjs';
+import { installControlRoutes, requireControlAuth } from './controlBus.mjs';
 import setupWsUpgrade from './wsUpgrade.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+try {
+  await discoverOverlayOrigins();
+} catch (err) {
+  console.warn('[overlay-proxy] origin discovery failed', err);
+}
 
 const app = express();
 app.disable('x-powered-by');
@@ -38,6 +44,16 @@ socketioProxy(app);
 genericProxy(app);
 overlayRoutes(app);
 installControlRoutes(app);
+
+app.post('/api/discover', requireControlAuth, async (_req, res) => {
+  try {
+    await discoverOverlayOrigins();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[overlay-proxy] origin discovery failed', err);
+    res.status(500).json({ error: 'failed' });
+  }
+});
 
 app.use(express.static(path.join(__dirname, '../public')));
 
