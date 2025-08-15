@@ -1,4 +1,12 @@
-import { cfg, getOverlayById, originOf, parseBaseFromReferer, inferOverlayId, readRawBody, unwrapProxyUrl } from '../server_utils.mjs';
+import {
+  cfg,
+  getOverlayById,
+  originOf,
+  parseBaseFromReferer,
+  inferOverlayId,
+  readRawBody,
+  unwrapProxyUrl
+} from '../server_utils.mjs';
 import { fetchAsset } from '../overlayFetcher.mjs';
 import { getCookieHeader } from '../cookies.mjs';
 import { fetch } from 'undici';
@@ -21,7 +29,14 @@ export default function genericProxy(app){
       const headers = { ...req.headers, origin: originOf(ov), referer: ov.url };
       delete headers.host;
 
-      const upstream = await fetchAsset(resolvedUrl, cfg.cacheSeconds, headers, overlayId, ov.url);
+      const upstream = await fetchAsset(
+        resolvedUrl,
+        cfg.cacheSeconds,
+        headers,
+        overlayId,
+        ov.url,
+        cfg.useCache
+      );
 
       let outBuf = upstream.buf;
       let outType = upstream.type;
@@ -120,7 +135,8 @@ export default function genericProxy(app){
             cfg.cacheSeconds,
             req.headers,
             cand.overlayId,
-            cand.baseUrl
+            cand.baseUrl,
+            cfg.useCache
           );
 
           if (up.status === 404) continue;

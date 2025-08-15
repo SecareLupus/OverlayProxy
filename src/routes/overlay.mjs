@@ -11,7 +11,16 @@ export default function overlayRoutes(app){
     const ov = getOverlayById(req.params.id);
     if (!ov) return res.status(404).send('Overlay not found');
     try {
-      const upstream = coercePage(await fetchOverlayPage(ov.url, cfg.cacheSeconds, req.headers, ov.id, ov.url));
+      const upstream = coercePage(
+        await fetchOverlayPage(
+          ov.url,
+          cfg.cacheSeconds,
+          req.headers,
+          ov.id,
+          ov.url,
+          cfg.useCache
+        )
+      );
       const { rewriteHtml } = await import('../rewrite_ext.mjs');
       const out = await rewriteHtml({ html: upstream.text || '', originUrl: ov.url, overlayId: ov.id });
       res.status(upstream.status).set('Content-Type', 'text/html; charset=utf-8').send(out);
@@ -24,7 +33,16 @@ export default function overlayRoutes(app){
     const ov = getOverlayById(req.params.id);
     if (!ov) return res.status(404).send('Overlay not found');
     try {
-      const upstream = coercePage(await fetchOverlayPage(ov.url, cfg.cacheSeconds, req.headers, ov.id, ov.url));
+      const upstream = coercePage(
+        await fetchOverlayPage(
+          ov.url,
+          cfg.cacheSeconds,
+          req.headers,
+          ov.id,
+          ov.url,
+          cfg.useCache
+        )
+      );
       const { rewriteHtml } = await import('../rewrite_ext.mjs');
       let html = await rewriteHtml({ html: upstream.text || '', originUrl: ov.url, overlayId: ov.id });
       const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
@@ -40,7 +58,16 @@ export default function overlayRoutes(app){
     if (!ov) return res.status(404).send('Overlay not found');
 
     try {
-      const upstream = coercePage(await fetchOverlayPage(ov.url, cfg.cacheSeconds, req.headers, ov.id, ov.url));
+      const upstream = coercePage(
+        await fetchOverlayPage(
+          ov.url,
+          cfg.cacheSeconds,
+          req.headers,
+          ov.id,
+          ov.url,
+          cfg.useCache
+        )
+      );
       const scopeSelector = ov.isolation === 'light' ? `[data-ov="${ov.id}"]` : undefined;
       const { rewriteHtml } = await import('../rewrite_ext.mjs');
       const html = await rewriteHtml({
