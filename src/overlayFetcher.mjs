@@ -2,10 +2,6 @@ import { fetch } from 'undici';
 import NodeCache from 'node-cache';
 import { getCookieHeader, storeSetCookies } from './cookies.mjs';
 
-const defaultUseCache = !['1', 'true', 'yes'].includes(
-  (process.env.DISABLE_CACHE || '').toLowerCase()
-);
-
 const cache = new NodeCache();
 
 for (const k of cache.keys()) {
@@ -38,7 +34,7 @@ export async function fetchOverlayPage(
   headers = {},
   overlayId,
   overlayPageUrl = '',
-  useCache = defaultUseCache
+  useCache = true
 ) {
   const key = `page:${overlayId}:${url}`;
   let hit;
@@ -77,7 +73,7 @@ export async function fetchAsset(
   headers = {},
   overlayId,
   overlayPageUrl = '',
-  useCache = defaultUseCache
+  useCache = true
 ) {
   const key = `asset:${overlayId}:${url}`;
   let hit;
