@@ -1,11 +1,64 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fetchOverlayPage, fetchAsset } from './overlayFetcher.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/default.json'), 'utf8'));
+
+async function discoverOverlayOrigins(){
+  const urlRe = /\bhttps?:\/\/[^\s"'<>]+|\bwss?:\/\/[^\s"'<>]+/g;
+
+  const scans = (cfg.overlays || []).map(async ov => {
+    const set = new Set(Array.isArray(ov.origins) ? ov.origins : []);
+
+    let baseOrigin;
+    try {
+      baseOrigin = new URL(ov.url).origin;
+      set.add(baseOrigin);
+    } catch {
+      return;
+    }
+
+    try {
+      const page = await fetchOverlayPage(ov.url, cfg.cacheSeconds, {}, ov.id, ov.url);
+      const html = page.text || '';
+      const jsUrls = new Set();
+      let m;
+      while ((m = urlRe.exec(html)) !== null) {
+        try {
+          const u = new URL(m[0]);
+          set.add(u.origin);
+          if (/\.js($|\?)/i.test(u.pathname)) jsUrls.add(u.toString());
+        } catch {}
+      }
+
+      await Promise.all(Array.from(jsUrls).map(async jsUrl => {
+        try {
+          const asset = await fetchAsset(jsUrl, cfg.cacheSeconds, {}, ov.id, ov.url);
+          const text = asset.buf.toString('utf8');
+          let m2;
+          while ((m2 = urlRe.exec(text)) !== null) {
+            try { set.add(new URL(m2[0]).origin); } catch {}
+          }
+        } catch {}
+      }));
+    } catch {}
+
+    set.delete(baseOrigin);
+    if (set.size > 0) {
+      ov.origins = Array.from(set);
+    } else {
+      delete ov.origins;
+    }
+  });
+
+  await Promise.all(scans);
+}
+
+await discoverOverlayOrigins();
 
 export function getOverlayById(id){ return (cfg.overlays || []).find(o => o.id === id); }
 

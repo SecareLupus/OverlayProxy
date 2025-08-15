@@ -19,5 +19,4 @@ CSS url() + srcset rewriting
 Backgrounds, sprites, fonts, and responsive images are now proxied (even when using relative paths), which reduces CORS/CSP friction and avoids broken assets.
 
 ## Configuration
-
-Each overlay entry supports an optional `origins` array listing additional domains used by that overlay (for APIs, WebSockets, etc.). Requests to these domains will be tagged with the overlay ID so cookies and headers are routed correctly.
+On startup the proxy fetches each overlay URL and scans its HTML and linked scripts for `https://` and `wss://` references. Any domains it finds are tagged with the overlay ID so cookies and headers route correctly. You can still provide an `origins` array in the config to manually include extra hosts that aren't discoverable.
