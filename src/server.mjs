@@ -450,7 +450,7 @@ const PORT = process.env.PORT || 4321;
 const server = app.listen(PORT, () => console.log(`[overlay-proxy] http://localhost:${PORT}`));
 
 // Which WS paths should we proxy to overlay origins?
-const WS_PREFIXES = ['/socket.io/', '/ws', '/realtime', '/live', '/cable']; // extend as needed
+const WS_PREFIXES = ['/socket.io', '/ws', '/realtime', '/live', '/cable']; // add new WS paths here
 
 server.on('upgrade', async (req, socket, head) => {
   // Avoid crashing on client socket errors (e.g. ECONNRESET)
@@ -467,8 +467,8 @@ server.on('upgrade', async (req, socket, head) => {
       });
     }
 
-    // socket.io & friends on our origin (keep your existing prefix check if you want)
-    if (path.startsWith('/socket.io') || path.startsWith('/ws') || path.startsWith('/realtime') || path.startsWith('/live')) {
+    // socket.io & friends on our origin (matches any prefix in WS_PREFIXES)
+    if (WS_PREFIXES.some(pfx => path.startsWith(pfx))) {
       const overlayId = url.searchParams.get('overlay');
       let candidates = [];
       if (overlayId) {

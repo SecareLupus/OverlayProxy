@@ -25,7 +25,13 @@ test('control bus reconnects after socket close', async () => {
   global.location = window.location;
 
   const stop = connectControlBus();
-  await new Promise(r => originalSetTimeout(r, 50));
+  await new Promise((resolve) => {
+    const check = () => {
+      if (connections >= 2) return resolve();
+      originalSetTimeout(check, 10);
+    };
+    check();
+  });
 
   assert.ok(connections >= 2);
 
