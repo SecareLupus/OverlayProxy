@@ -5,7 +5,8 @@ import {
   parseBaseFromReferer,
   inferOverlayId,
   readRawBody,
-  unwrapProxyUrl
+  unwrapProxyUrl,
+  orderedOverlays
 } from '../server_utils.mjs';
 import { fetchAsset } from '../overlayFetcher.mjs';
 import { getCookieHeader } from '../cookies.mjs';
@@ -115,13 +116,10 @@ export default function genericProxy(app){
       const { overlayId, baseUrl } = parseBaseFromReferer(req);
       const filePath = req.path.replace(/^\//, '');
 
+      const ordered = orderedOverlays(req, overlayId);
       const candidates = [];
       if (baseUrl) candidates.push({ overlayId, baseUrl });
-      if (overlayId && !baseUrl) {
-        const ov = getOverlayById(overlayId);
-        if (ov) candidates.push({ overlayId, baseUrl: ov.url });
-      }
-      for (const ov of (cfg.overlays || [])) {
+      for (const ov of ordered) {
         if (!candidates.find(c => c.baseUrl === ov.url)) {
           candidates.push({ overlayId: ov.id, baseUrl: ov.url });
         }

@@ -1,4 +1,4 @@
-import { cfg, getOverlayById, originOf, guessOverlayFromReferer, readRawBody } from '../server_utils.mjs';
+import { cfg, originOf, orderedOverlays, readRawBody } from '../server_utils.mjs';
 import { fetch } from 'undici';
 
 const ABS_PREFIXES = ['/cdn-cgi/', '/assets/', '/static/', '/build/', '/s/', '/dist/'];
@@ -7,10 +7,7 @@ export default function absPrefixProxy(app){
   for (const pfx of ABS_PREFIXES) {
     app.all(pfx + '*', async (req, res) => {
       try {
-        const ordered = [];
-        const fromRef = guessOverlayFromReferer(req);
-        if (fromRef) { const ov = getOverlayById(fromRef); if (ov) ordered.push(ov); }
-        for (const ov of (cfg.overlays || [])) if (!ordered.includes(ov)) ordered.push(ov);
+        const ordered = orderedOverlays(req, req.query.overlay);
 
         const pathWithQuery = req.originalUrl;
         let lastErr;
