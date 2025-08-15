@@ -24,11 +24,12 @@ test('control bus reconnects after socket close', async () => {
   global.window = window;
   global.location = window.location;
 
-  connectControlBus();
+  const stop = connectControlBus();
   await new Promise(r => originalSetTimeout(r, 50));
 
   assert.ok(connections >= 2);
 
+  stop();
   wss.close();
   global.setTimeout = originalSetTimeout;
 });
