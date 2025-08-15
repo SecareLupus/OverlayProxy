@@ -1,4 +1,4 @@
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, WebSocket } from 'ws';
 import crypto from 'crypto';
 
 export const controlWss = new WebSocketServer({ noServer: true });
@@ -17,7 +17,7 @@ console.log(`[overlay-proxy] CONTROL_TOKEN: ${CONTROL_TOKEN}`);
 
 export function broadcast(msg) {
   const body = JSON.stringify(msg);
-  for (const ws of controlClients) if (ws.readyState === ws.OPEN) ws.send(body);
+  for (const ws of controlClients) if (ws.readyState === WebSocket.OPEN) ws.send(body);
 }
 
 export function requireControlAuth(req, res, next) {
