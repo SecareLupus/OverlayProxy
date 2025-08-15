@@ -8,6 +8,12 @@ const __dirname = path.dirname(__filename);
 
 export const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/default.json'), 'utf8'));
 
+const envDisable = ['1', 'true', 'yes'].includes(
+  (process.env.DISABLE_CACHE || '').toLowerCase()
+);
+if (typeof cfg.useCache !== 'boolean') cfg.useCache = true;
+if (envDisable) cfg.useCache = false;
+
 async function discoverOverlayOrigins(){
   const urlRe = /\bhttps?:\/\/[^\s"'<>]+|\bwss?:\/\/[^\s"'<>]+/g;
 
@@ -23,7 +29,14 @@ async function discoverOverlayOrigins(){
     }
 
     try {
-      const page = await fetchOverlayPage(ov.url, cfg.cacheSeconds, {}, ov.id, ov.url);
+      const page = await fetchOverlayPage(
+        ov.url,
+        cfg.cacheSeconds,
+        {},
+        ov.id,
+        ov.url,
+        cfg.useCache
+      );
       const html = page.text || '';
       const jsUrls = new Set();
       let m;
@@ -37,7 +50,14 @@ async function discoverOverlayOrigins(){
 
       await Promise.all(Array.from(jsUrls).map(async jsUrl => {
         try {
-          const asset = await fetchAsset(jsUrl, cfg.cacheSeconds, {}, ov.id, ov.url);
+          const asset = await fetchAsset(
+            jsUrl,
+            cfg.cacheSeconds,
+            {},
+            ov.id,
+            ov.url,
+            cfg.useCache
+          );
           const text = asset.buf.toString('utf8');
           let m2;
           while ((m2 = urlRe.exec(text)) !== null) {

@@ -20,3 +20,6 @@ Backgrounds, sprites, fonts, and responsive images are now proxied (even when us
 
 ## Configuration
 On startup the proxy fetches each overlay URL and scans its HTML and linked scripts for `https://` and `wss://` references. Any domains it finds are tagged with the overlay ID so cookies and headers route correctly. You can still provide an `origins` array in the config to manually include extra hosts that aren't discoverable.
+
+### Disabling the fetch cache
+For troubleshooting overlay changes it's sometimes useful to bypass the in-memory cache. Set the environment variable `DISABLE_CACHE=1` or add `"useCache": false` to your config to disable caching of overlay pages and assets.

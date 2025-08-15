@@ -2,6 +2,10 @@ import { fetch } from 'undici';
 import NodeCache from 'node-cache';
 import { getCookieHeader, storeSetCookies } from './cookies.mjs';
 
+const defaultUseCache = !['1', 'true', 'yes'].includes(
+  (process.env.DISABLE_CACHE || '').toLowerCase()
+);
+
 const cache = new NodeCache();
 
 for (const k of cache.keys()) {
@@ -28,13 +32,23 @@ function refererFor(assetUrl, overlayPageUrl) {
   }
 }
 
-export async function fetchOverlayPage(url, cacheSeconds = 60, headers = {}, overlayId, overlayPageUrl = '') {
+export async function fetchOverlayPage(
+  url,
+  cacheSeconds = 60,
+  headers = {},
+  overlayId,
+  overlayPageUrl = '',
+  useCache = defaultUseCache
+) {
   const key = `page:${overlayId}:${url}`;
-  let hit = cache.get(key);
-  if (hit === undefined) {
-    hit = migrateLegacyCache(`page:${url}`, key, cacheSeconds);
+  let hit;
+  if (useCache) {
+    hit = cache.get(key);
+    if (hit === undefined) {
+      hit = migrateLegacyCache(`page:${url}`, key, cacheSeconds);
+    }
+    if (hit !== undefined) return hit;
   }
-  if (hit !== undefined) return hit;
 
   const merged = {
     ...headers,
@@ -52,18 +66,28 @@ export async function fetchOverlayPage(url, cacheSeconds = 60, headers = {}, ove
 
   const text = await res.text(); // safe: identity encoded
   // Cache only successful pages to avoid pinning errors
-  if (res.ok) cache.set(key, text, cacheSeconds);
+  if (res.ok && useCache) cache.set(key, text, cacheSeconds);
 
   return { ok: res.ok, status: res.status, text, headers: Object.fromEntries(res.headers) };
 }
 
-export async function fetchAsset(url, cacheSeconds = 60, headers = {}, overlayId, overlayPageUrl = '') {
+export async function fetchAsset(
+  url,
+  cacheSeconds = 60,
+  headers = {},
+  overlayId,
+  overlayPageUrl = '',
+  useCache = defaultUseCache
+) {
   const key = `asset:${overlayId}:${url}`;
-  let hit = cache.get(key);
-  if (hit === undefined) {
-    hit = migrateLegacyCache(`asset:${url}`, key, cacheSeconds);
+  let hit;
+  if (useCache) {
+    hit = cache.get(key);
+    if (hit === undefined) {
+      hit = migrateLegacyCache(`asset:${url}`, key, cacheSeconds);
+    }
+    if (hit !== undefined) return hit;
   }
-  if (hit !== undefined) return hit;
 
   const merged = {
     ...headers,
@@ -86,7 +110,7 @@ export async function fetchAsset(url, cacheSeconds = 60, headers = {}, overlayId
 
   const out = { buf, type, etag, cacheControl, status: res.status, ok: res.ok, url };
   // Cache only successful assets
-  if (res.ok) cache.set(key, out, cacheSeconds);
+  if (res.ok && useCache) cache.set(key, out, cacheSeconds);
   return out;
 }
 

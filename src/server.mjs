@@ -24,6 +24,8 @@ app.use(compression());
 app.use(cors({ origin: process.env.ORIGIN_ALLOW || '*' }));
 app.use(express.json({ limit: '128kb' }));
 
+if (!cfg.useCache) console.log('[overlay-proxy] cache disabled');
+
 app.get('/config.json', (_req, res) => res.json(cfg));
 app.get('/config.js', (_req, res) => {
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
