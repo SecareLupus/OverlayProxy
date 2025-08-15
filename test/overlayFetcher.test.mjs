@@ -30,14 +30,14 @@ test('caches pages per overlay id', async () => {
       })
       .persist();
 
-    const a1 = await fetchOverlayPage(url, 60, {}, 'a');
+    const a1 = await fetchOverlayPage(url, 60, {}, 'a', undefined, true);
     assert.equal(typeof a1, 'object');
     assert.equal(a1.text, 'p1');
 
-    const b1 = await fetchOverlayPage(url, 60, {}, 'b');
+    const b1 = await fetchOverlayPage(url, 60, {}, 'b', undefined, true);
     assert.equal(b1.text, 'p2');
 
-    const a2 = await fetchOverlayPage(url, 60, {}, 'a');
+    const a2 = await fetchOverlayPage(url, 60, {}, 'a', undefined, true);
     const textA2 = typeof a2 === 'string' ? a2 : a2.text;
     assert.equal(textA2, 'p1');
 
@@ -64,11 +64,11 @@ test('does not cache failed pages', async () => {
         return 'ok';
       });
 
-    const first = await fetchOverlayPage(url, 60, {}, 'a');
+    const first = await fetchOverlayPage(url, 60, {}, 'a', undefined, true);
     assert.equal(first.ok, false);
     assert.equal(first.status, 500);
 
-    const second = await fetchOverlayPage(url, 60, {}, 'a');
+    const second = await fetchOverlayPage(url, 60, {}, 'a', undefined, true);
     assert.equal(second.ok, true);
     assert.equal(second.text, 'ok');
 
@@ -90,13 +90,13 @@ test('caches assets per overlay id', async () => {
       }, { headers: { 'content-type': 'text/plain' } })
       .persist();
 
-    const a1 = await fetchAsset(url, 60, {}, 'a');
+    const a1 = await fetchAsset(url, 60, {}, 'a', undefined, true);
     assert.equal(a1.buf.toString(), 'a1');
 
-    const b1 = await fetchAsset(url, 60, {}, 'b');
+    const b1 = await fetchAsset(url, 60, {}, 'b', undefined, true);
     assert.equal(b1.buf.toString(), 'a2');
 
-    const a2 = await fetchAsset(url, 60, {}, 'a');
+    const a2 = await fetchAsset(url, 60, {}, 'a', undefined, true);
     assert.equal(a2.buf.toString(), 'a1');
 
     assert.equal(calls, 2);
@@ -124,10 +124,10 @@ test('sends stored cookies and isolates per overlay id', async () => {
       }, { headers: { 'content-type': 'text/plain' } })
       .persist();
 
-    await fetchOverlayPage(origin + '/a', 60, {}, 'a');
-    await fetchOverlayPage(origin + '/b', 60, {}, 'b');
-    await fetchAsset(origin + '/asset.js', 60, {}, 'a');
-    await fetchAsset(origin + '/asset.js', 60, {}, 'b');
+    await fetchOverlayPage(origin + '/a', 60, {}, 'a', undefined, true);
+    await fetchOverlayPage(origin + '/b', 60, {}, 'b', undefined, true);
+    await fetchAsset(origin + '/asset.js', 60, {}, 'a', undefined, true);
+    await fetchAsset(origin + '/asset.js', 60, {}, 'b', undefined, true);
 
     assert.deepEqual(seen, ['sess=A', 'sess=B']);
   });
@@ -153,11 +153,11 @@ test('does not cache failed assets', async () => {
         return 'ok';
       }, { headers: { 'content-type': 'text/plain' } });
 
-    const first = await fetchAsset(url, 60, {}, 'a');
+    const first = await fetchAsset(url, 60, {}, 'a', undefined, true);
     assert.equal(first.ok, false);
     assert.equal(first.status, 500);
 
-    const second = await fetchAsset(url, 60, {}, 'a');
+    const second = await fetchAsset(url, 60, {}, 'a', undefined, true);
     assert.equal(second.ok, true);
     assert.equal(second.buf.toString(), 'ok');
 
