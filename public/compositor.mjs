@@ -134,15 +134,7 @@ async function mountDomOverlay(ov){
 }
 
 function mountIframeOverlay(ov){
-  const host = document.createElement('div');
-  host.className = 'overlay-host';
-  host.style.left = px(ov.x);
-  host.style.top = px(ov.y);
-  host.style.width = px(ov.width);
-  host.style.height = px(ov.height);
-  host.style.zIndex = String(ov.z ?? 0);
-  host.style.opacity = String(ov.opacity ?? 1);
-  host.style.transform = `scale(${ov.scale ?? 1})`;
+  const host = makeHost(ov);
 
   const iframe = document.createElement('iframe');
   iframe.className = 'overlay-iframe';
