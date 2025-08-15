@@ -1,14 +1,11 @@
-import { cfg, getOverlayById, originOf, readRawBody } from '../server_utils.mjs';
+import { cfg, originOf, orderedOverlays, readRawBody } from '../server_utils.mjs';
 import { fetch } from 'undici';
 import { getCookieHeader } from '../cookies.mjs';
 
 export default function socketioProxy(app){
   app.all('/socket.io/*', async (req, res) => {
     try {
-      const ovParam = req.query.overlay;
-      const ordered = [];
-      if (ovParam) { const ov = getOverlayById(ovParam); if (ov) ordered.push(ov); }
-      for (const ov of (cfg.overlays || [])) if (!ordered.includes(ov)) ordered.push(ov);
+      const ordered = orderedOverlays(req, req.query.overlay);
 
       for (const ov of ordered) {
         const upstreamUrl = originOf(ov) + req.originalUrl.replace(/([?&])overlay=[^&]+&?/, '$1').replace(/[?&]$/, '');

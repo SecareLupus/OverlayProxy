@@ -111,6 +111,19 @@ export function guessOverlayFromReferer(req){
   return m ? m[1] : null;
 }
 
+export function orderedOverlays(req, explicitId){
+  const ordered = [];
+  const push = id => {
+    const ov = getOverlayById(id);
+    if (ov && !ordered.includes(ov)) ordered.push(ov);
+  };
+  if (explicitId) push(explicitId);
+  const fromRef = guessOverlayFromReferer(req);
+  if (fromRef) push(fromRef);
+  for (const ov of (cfg.overlays || [])) if (!ordered.includes(ov)) ordered.push(ov);
+  return ordered;
+}
+
 export function inferOverlayId(req){
   return (
     req.query.overlay ||
