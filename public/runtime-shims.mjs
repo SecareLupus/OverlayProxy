@@ -79,6 +79,7 @@ export function installRuntimeShims(originToId){
 
     (function(){
       const Orig = self.XMLHttpRequest;
+      if (!Orig) return;
       function X(){
         const xhr = new Orig();
         const open = xhr.open;
@@ -248,6 +249,34 @@ export function installRuntimeShims(originToId){
     }
     if (window.Worker) window.Worker = wrap(window.Worker);
     if (window.SharedWorker) window.SharedWorker = wrap(window.SharedWorker);
+  })();
+
+  // ---- ServiceWorker register shim ----
+  (function(){
+    const sw = navigator.serviceWorker;
+    if (!sw || !sw.register) return;
+    const orig = sw.register.bind(sw);
+    sw.register = function(url, opts){
+      try {
+        const u = new URL(url, ORIGIN);
+        const id = pickOverlayIdFor(u.toString());
+        let prox;
+        if (u.origin === ORIGIN) {
+          if (id) u.searchParams.set('overlay', id);
+          prox = u.toString();
+        } else {
+          const ov = id ? 'overlay=' + encodeURIComponent(id) + '&' : '';
+          prox = '/proxy?' + ov + 'url=' + encodeURIComponent(u.toString());
+        }
+        const boot = `self.__ovOverlayId=${id ? JSON.stringify(id) : 'undefined'};\n${WORKER_SHIM}\nimportScripts(${JSON.stringify(prox)});`;
+        const blob = new Blob([boot], { type: 'application/javascript' });
+        const obj = URL.createObjectURL(blob);
+        const p = orig(obj, opts);
+        p.then(() => URL.revokeObjectURL(obj), () => URL.revokeObjectURL(obj));
+        return p;
+      } catch {}
+      return orig(url, opts);
+    };
   })();
 }
 
