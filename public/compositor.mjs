@@ -36,13 +36,12 @@ function makeHost(ov){
   return host;
 }
 
-async function executeScriptsSequentially(container, overlayId) {
+export async function runScriptsSequentially(nodes, overlayId){
   const prev = window.__ovActiveOverlay;
   window.__ovActiveOverlay = overlayId;
   try {
-    const scripts = Array.from(container.querySelectorAll('script'));
     let code = '';
-    for (const old of scripts) {
+    for (const old of nodes) {
       if (old.src) {
         try {
           const res = await fetch(old.src);
@@ -53,50 +52,14 @@ async function executeScriptsSequentially(container, overlayId) {
       } else {
         code += (old.textContent || '') + '\n';
       }
-      old.remove();
+      old.remove?.();
     }
     if (code.trim()) {
-      const blob = new Blob([code], { type: 'text/javascript' });
-      const url = URL.createObjectURL(blob);
-      try {
-        await import(/* @vite-ignore */ url);
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-    }
-  } finally {
-    const id = overlayId;
-    window.__ovLastOverlay = { id, t: performance.now() };
-    window.__ovActiveOverlay = prev;
-  }
-}
-
-async function executeScriptsSequentiallyInDocument(scripts, overlayId){
-  const prev = window.__ovActiveOverlay;
-  window.__ovActiveOverlay = overlayId;
-  try {
-    let code = '';
-    for (const old of scripts) {
-      if (old.src) {
-        try {
-          const res = await fetch(old.src);
-          code += await res.text() + '\n';
-        } catch (e) {
-          console.error('failed to fetch script', old.src, e);
-        }
-      } else {
-        code += (old.textContent || '') + '\n';
-      }
-      old.remove();
-    }
-    if (code.trim()) {
-      const blob = new Blob([code], { type: 'text/javascript' });
-      const url = URL.createObjectURL(blob);
-      try {
-        await import(/* @vite-ignore */ url);
-      } finally {
-        URL.revokeObjectURL(url);
-      }
+      const base64 = typeof btoa === 'function'
+        ? btoa(code)
+        : Buffer.from(code, 'utf-8').toString('base64');
+      const url = `data:text/javascript;base64,${base64}`;
+      await import(/* @vite-ignore */ url);
     }
   } finally {
     const id = overlayId;
@@ -162,8 +125,8 @@ async function mountDomOverlay(ov){
   // Execute head scripts first, then body scripts
   (async () => {
     try {
-      await executeScriptsSequentiallyInDocument(headScripts, ov.id);
-      await executeScriptsSequentially(container, ov.id);
+      await runScriptsSequentially(headScripts, ov.id);
+      await runScriptsSequentially(container.querySelectorAll('script'), ov.id);
     } catch (e) {
       console.error('overlay script error', ov.id, e);
     }
@@ -229,7 +192,7 @@ async function mountLightDomOverlay(ov, root){
   // Execute scripts in order but don't block other overlays
   const scripts = [...doc.querySelectorAll('head script, body script')];
   injectRuntimeShimsFor(ov.id);
-  executeScriptsSequentiallyInDocument(scripts, ov.id)
+  runScriptsSequentially(scripts, ov.id)
     .catch(e => console.error('overlay script error', ov.id, e));
 }
 
