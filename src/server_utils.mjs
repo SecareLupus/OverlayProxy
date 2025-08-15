@@ -99,3 +99,24 @@ export function inferOverlayId(req){
     null
   );
 }
+
+export async function readRawBody(req){
+  return await new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+export function unwrapProxyUrl(urlStr){
+  try {
+    let cur = new URL(urlStr);
+    for (let i = 0; i < 4; i++) {
+      const inner = cur.searchParams.get('url');
+      if (!inner) break;
+      cur = new URL(inner, cur);
+    }
+    return cur.toString();
+  } catch { return urlStr; }
+}
